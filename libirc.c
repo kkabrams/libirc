@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <sys/select.h>
+#include "irc.h"
 
 //#define DEBUG "epoch" //nick or channel to send debug info to.
 #define CHUNK 4096
@@ -204,12 +205,6 @@ int ircConnect(char *serv,char *port,char *nick,char *user) {
  write(fd,sendstr,strlen(sendstr));
  return fd;
 }
-
-struct user {
- char *nick;
- char *user;
- char *host;
-};
 
 //this function mangles the input.
 //gotta free the returned pointer but not each pointer in the array.
