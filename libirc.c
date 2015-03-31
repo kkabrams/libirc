@@ -17,18 +17,10 @@ int main(int argc,char *argv[]) {
  return 0;
 }
 
-#define SILLYLIMIT 256
-
 int serverConnect(char *serv,char *port) {
  int rv;
  int fd=0;
- int n=1;
- int try_ipv4=0;
- char buf[SILLYLIMIT];
  struct addrinfo hints, *servinfo, *p=0;
- struct in_addr saddr;
- struct in6_addr saddr6;
- struct hostent *he;
  memset(&hints,0,sizeof hints);
  hints.ai_family=AF_INET;
  hints.ai_socktype=SOCK_STREAM;
@@ -230,7 +222,7 @@ char **line_cutter(int fd,char *line,struct user *user) {
   if((a[0]=strchr((user->nick),' '))) {
    *a[0]=0;
    a[0]++;
-   for(i=0;a[i+1]=strchr(a[i],' ');i++) {
+   for(i=0;(a[i+1]=strchr(a[i],' '));i++) {
     *a[i+1]=0;
     a[i+1]++;
     if(*a[i+1] == ':') {//we're done.
