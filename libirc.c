@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <sys/select.h>
+#include <sys/un.h>
 #include "irc.h"
 
 //#define DEBUG "epoch" //nick or channel to send debug info to.
@@ -20,49 +21,74 @@ int main(int argc,char *argv[]) {
 int serverConnect(char *serv,char *port) {
  int rv;
  int fd=0;
+ int s[2];
+ int pid;
+ char *name[3];
  struct addrinfo hints, *servinfo, *p=0;
- memset(&hints,0,sizeof hints);
- hints.ai_family=AF_INET;
- hints.ai_socktype=SOCK_STREAM;
- if((fd=socket(PF_INET,SOCK_STREAM,IPPROTO_TCP)) < 0) {
-  perror("socket");
+ if(!serv || !port) return -1;
+ if(*serv != '|') {
+  memset(&hints,0,sizeof hints);
+  hints.ai_family=AF_INET;
+  hints.ai_socktype=SOCK_STREAM;
+  if((fd=socket(PF_INET,SOCK_STREAM,IPPROTO_TCP)) < 0) {
+   perror("socket");
+   return -1;
+  }
+ /*
+  for(try_ipv4=0;try_ipv4 < 2;try_ipv4++) {
+   if(!(he=gethostbyname2(
+        try_ipv4
+        ?inet_aton(serv,&saddr)
+          ?inet_ntoa(saddr)
+          :serv
+        :inet_pton(AF_INET6,serv,&saddr6)
+          ?inet_ntop(AF_INET6,&saddr6,buf,SILLYLIMIT)
+          :serv
+      ,try_ipv4?AF_INET:AF_INET6))) return -1;
+   for(;*(he->h_addr_list);he->h_addr_list++) {
+    printf("trying to connect to %s:%s attempt #%d\n",serv,port,n);
+    n++;
+ */
+ //   if((rv=getaddrinfo(he->h_addr_list,port,&hints,&servinfo)) != 0) {
+    if((rv=getaddrinfo(serv,port,&hints,&servinfo)) != 0) {
+     fprintf(stderr,"error resolving '%s'.\n",serv);
+     return -1;
+    }
+    for(p=servinfo;p;p=p->ai_next) {
+     if(connect(fd,p->ai_addr, p->ai_addrlen) < 0) {
+      perror("connect");
+      continue;
+     } else {
+      return fd;
+     }
+    }
+    //printf("trying a differnt address...\n");
+   //}
+   //printf("trying a different AF...\n");
+  //}
+  //printf("well, shit. how'd I get here?\n");
+  return -1;
+ } else {
+  name[0]=serv+1;
+  name[1]=port;
+  name[2]=0;
+  socketpair(PF_LOCAL,SOCK_STREAM,0,s);
+  switch(pid=fork()) {
+   case 0://child
+    close(0);
+    close(1);
+    //close(2);
+    dup(s[1]);
+    dup(s[1]);
+    //dup(s[1]);
+    execv(name[0],name);
+   case -1://error
+    return -1;
+   default://parent
+    return s[0];
+  }
   return -1;
  }
-/*
- for(try_ipv4=0;try_ipv4 < 2;try_ipv4++) {
-  if(!(he=gethostbyname2(
-       try_ipv4
-       ?inet_aton(serv,&saddr)
-         ?inet_ntoa(saddr)
-         :serv
-       :inet_pton(AF_INET6,serv,&saddr6)
-         ?inet_ntop(AF_INET6,&saddr6,buf,SILLYLIMIT)
-         :serv
-     ,try_ipv4?AF_INET:AF_INET6))) return -1;
-
-  for(;*(he->h_addr_list);he->h_addr_list++) {
-   printf("trying to connect to %s:%s attempt #%d\n",serv,port,n);
-   n++;
-*/
-//   if((rv=getaddrinfo(he->h_addr_list,port,&hints,&servinfo)) != 0) {
-   if((rv=getaddrinfo(serv,port,&hints,&servinfo)) != 0) {
-    fprintf(stderr,"error resolving '%s'.\n",serv);
-    return -1;
-   }
-   for(p=servinfo;p;p=p->ai_next) {
-    if(connect(fd,p->ai_addr, p->ai_addrlen) < 0) {
-     perror("connect");
-     continue;
-    } else {
-     return fd;
-    }
-   }
-   //printf("trying a differnt address...\n");
-  //}
-  //printf("trying a different AF...\n");
- //}
- //printf("well, shit. how'd I get here?\n");
- return -1;
 }
 
 int fdlen(int *fds) {
