@@ -14,81 +14,63 @@
 //#define DEBUG "epoch" //nick or channel to send debug info to.
 #define CHUNK 4096
 
-int main(int argc,char *argv[]) {
- return 0;
-}
+//int main(int argc,char *argv[]) {
+// return 0;
+//}
+
+#define SILLYLIMIT 1024
 
 int serverConnect(char *serv,char *port) {
- int rv;
- int fd=0;
+ int fd=-1;
  int s[2];
  int pid;
+ int try_ipv4;
  char *name[3];
+ char buf[SILLYLIMIT];
  struct addrinfo hints, *servinfo, *p=0;
+ struct hostent *he;
+ struct sockaddr_in saddr;
+ struct sockaddr_in6 saddr6;
+ printf("libirc: serverConnect: %s %s\n",serv,port);
  if(!serv || !port) return -1;
- if(*serv != '|') {
-  memset(&hints,0,sizeof hints);
-  hints.ai_family=AF_INET;
-  hints.ai_socktype=SOCK_STREAM;
-  if((fd=socket(PF_INET,SOCK_STREAM,IPPROTO_TCP)) < 0) {
-   perror("socket");
-   return -1;
-  }
- /*
-  for(try_ipv4=0;try_ipv4 < 2;try_ipv4++) {
-   if(!(he=gethostbyname2(
-        try_ipv4
-        ?inet_aton(serv,&saddr)
-          ?inet_ntoa(saddr)
-          :serv
-        :inet_pton(AF_INET6,serv,&saddr6)
-          ?inet_ntop(AF_INET6,&saddr6,buf,SILLYLIMIT)
-          :serv
-      ,try_ipv4?AF_INET:AF_INET6))) return -1;
-   for(;*(he->h_addr_list);he->h_addr_list++) {
-    printf("trying to connect to %s:%s attempt #%d\n",serv,port,n);
-    n++;
- */
- //   if((rv=getaddrinfo(he->h_addr_list,port,&hints,&servinfo)) != 0) {
-    if((rv=getaddrinfo(serv,port,&hints,&servinfo)) != 0) {
-     fprintf(stderr,"error resolving '%s'.\n",serv);
-     return -1;
-    }
-    for(p=servinfo;p;p=p->ai_next) {
-     if(connect(fd,p->ai_addr, p->ai_addrlen) < 0) {
-      perror("connect");
-      continue;
-     } else {
-      return fd;
-     }
-    }
-    //printf("trying a differnt address...\n");
-   //}
-   //printf("trying a different AF...\n");
-  //}
-  //printf("well, shit. how'd I get here?\n");
-  return -1;
- } else {
+ if(*serv == '|') {
   name[0]=serv+1;
   name[1]=port;
   name[2]=0;
   socketpair(PF_LOCAL,SOCK_STREAM,0,s);
-  switch(pid=fork()) {
-   case 0://child
-    close(0);
-    close(1);
-    //close(2);
-    dup(s[1]);
-    dup(s[1]);
-    //dup(s[1]);
-    execv(name[0],name);
-   case -1://error
-    return -1;
-   default://parent
-    return s[0];
+  if(!(pid=fork())) {
+   dup2(s[1],0);
+   dup2(s[1],1);
+   execv(name[0],name);
   }
-  return -1;
+  if(pid == -1) return -1;
+  return s[0];
  }
+ memset(&hints,0,sizeof hints);
+ hints.ai_socktype=SOCK_STREAM;
+ hints.ai_protocol=IPPROTO_TCP;
+ for(try_ipv4=0;try_ipv4 < 2;try_ipv4++) {
+  hints.ai_family=try_ipv4?AF_INET:AF_INET6;
+  if(fd != -1) close(fd);
+  if((fd=socket(hints.ai_family,SOCK_STREAM,IPPROTO_TCP)) < 0) return -1;
+  if(!(he=gethostbyname2(
+          try_ipv4
+            ?inet_aton(serv,&(saddr.sin_addr))
+              ?inet_ntoa(saddr.sin_addr)
+              :serv
+            :inet_pton(AF_INET6,serv,&(saddr6.sin6_addr))
+              ?inet_ntop(AF_INET6,&(saddr6.sin6_addr),buf,SILLYLIMIT)
+              :serv
+          ,hints.ai_family))) continue;
+  for(;*(he->h_addr_list);(he->h_addr_list)++) {
+   inet_ntop(hints.ai_family,*(he->h_addr_list),buf,SILLYLIMIT);
+   if(!getaddrinfo(buf,port,&hints,&servinfo))
+    for(p=servinfo;p;p=p->ai_next)
+     if(connect(fd,p->ai_addr, p->ai_addrlen) < 0) continue; else return fd;
+  }
+ }
+ printf("I tried as hard as I could and couldn't connect to %s:%s\n",serv,port);
+ return -1;
 }
 
 int fdlen(int *fds) {
@@ -138,8 +120,12 @@ int runem(int *fds,void (*line_handler)(),void (*extra_handler)()) {
   for(i=0;fds[i] != -1;i++) {
    if(FD_ISSET(fds[i],&readfs)) {
     if((n=recv(fds[i],buffers[i],CHUNK,0)) <= 0) {//read CHUNK bytes
-     fprintf(stderr,"recv: %d\n",n);
-     perror("recv");
+     if(n) {
+      fprintf(stderr,"recv: %d\n",n);
+      perror("recv");
+     } else {
+      fprintf(stderr,"connection closed. fd: %d\n",fds[i]);
+     }
      return 2;
     } else {
      buffers[i][n]=0;//deff right.
