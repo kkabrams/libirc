@@ -14,12 +14,13 @@
 //#define DEBUG "epoch" //nick or channel to send debug info to.
 #define CHUNK 4096
 
-//int main(int argc,char *argv[]) {
-// return 0;
-//}
-
 #define SILLYLIMIT 1024
 
+/* how this works:
+if server == |/program then open a socketpair and fork and exec program
+else try serv as IPv6, as IPv4, resolve as IPv6, resolve as IPv4
+connect to that.
+*/
 int serverConnect(char *serv,char *port) {
  int fd=-1;
  int s[2];
@@ -85,8 +86,7 @@ int runem(int *fds,void (*line_handler)(),void (*extra_handler)()) {
  fd_set master;
  fd_set readfs;
  struct timeval timeout;
- int fdmax=0,n,s,i;
- int fd;
+ int fdmax=0,n,i;
  char *backlogs[fdl];
  char *t,*line=0;
  int blsize=CHUNK;
@@ -95,94 +95,49 @@ int runem(int *fds,void (*line_handler)(),void (*extra_handler)()) {
  FD_ZERO(&master);
  FD_ZERO(&readfs);
  for(i=0;fds[i] != -1;i++) {
-  //if(!backlogs[i]) return 252;//wtf is this here for? ofc they're not set!
   FD_SET(fds[i],&master);
   backlogs[i]=malloc(CHUNK+1);
   memset(backlogs[i],0,CHUNK);
   memset(buffers[i],0,CHUNK);
   fdmax=fds[i]>fdmax?fds[i]:fdmax;
  }
- int done=0;
- while(!done) {
-  for(fd=0;fd<=fdmax;fd++) {
-   if(FD_ISSET(fd,&master)) {
-    if(extra_handler) extra_handler(fd);
-   }
-  }
+ for(;;) {
   readfs=master;
   timeout.tv_sec=0;
   timeout.tv_usec=1000;
-  if( select(fdmax+1,&readfs,0,0,&timeout) == -1 ) {
-   printf("\n!!!It is crashing here!!!\n\n");
-   perror("select");
-   return 1;
-  }
+  if((j=select(fdmax+1,&readfs,0,0,&timeout)) == -1 ) return perror("select"),1;
+  for(i=0;fds[i] != -1;i++) if(extra_handler) extra_handler(fds[i]);
+  if(j == 0) continue;//don't bother to loop over them.
+  printf("getting there.\n");
   for(i=0;fds[i] != -1;i++) {
-   if(FD_ISSET(fds[i],&readfs)) {
-    if((n=recv(fds[i],buffers[i],CHUNK,0)) <= 0) {//read CHUNK bytes
-     if(n) {
-      fprintf(stderr,"recv: %d\n",n);
-      perror("recv");
-     } else {
-      fprintf(stderr,"connection closed. fd: %d\n",fds[i]);
-     }
-     return 2;
+   if(!FD_ISSET(fds[i],&readfs)) continue;
+   if((n=recv(fds[i],buffers[i],CHUNK,0)) <= 0) return (perror("recv"),2);
+   buffers[i][n]=0;//deff right.
+   if(bllen+n >= blsize) {//this is probably off...
+    blsize+=n;
+    t=malloc(blsize);
+    if(!t) exit(253);
+    memcpy(t,backlogs[i],blsize-n+1);
+    free(backlogs[i]);
+    backlogs[i]=t;
+   }
+   memcpy(backlogs[i]+bllen,buffers[i],n);
+   bllen+=n;
+
+//HERE EPOCH
+   while((t=strstr(backlogs[i],"\r\n"))) {
+    line=backlogs[i];
+    if(!strncmp(line,"PING",4)) {
+     line[1]='O';
+     write(fds[i],line,t-backlogs[i]+2);
     } else {
-     buffers[i][n]=0;//deff right.
-     if(bllen+n >= blsize) {//this is probably off...
-      blsize+=n;
-      t=malloc(blsize);
-      if(!t) {
-       printf("OH FUCK! MALLOC FAILED!\n");
-       exit(253);
-      }
-      memset(t,0,blsize);//optional?
-      memcpy(t,backlogs[i],blsize-n+1);//???
-      free(backlogs[i]);
-      backlogs[i]=t;
-     }
-     memcpy(backlogs[i]+bllen,buffers[i],n);
-     bllen+=n;
-     for(j=0,s=0;j<bllen;j++) {
-      if(backlogs[i][j]=='\n') {
-       line=malloc(j-s+3);//on linux it crashes without the +1 +3? weird. when did I do that?
-       if(!line) {
-        printf("ANOTHER malloc error!\n");
-        exit(254);
-       }
-       memcpy(line,backlogs[i]+s,j-s+2);
-       line[j-s+1]=0;//gotta null terminate this. line_handler expects it .
-       s=j+1;//the character after the newline.
-       if(!strncmp(line,"PING",4)) {
-        t=malloc(strlen(line));
-        strcpy(t,"PONG ");
-        strcat(t,line+6);
-        write(fds[i],t,strlen(t));
- #ifdef DEBUG
-        printf("%s\nPONG %s\n",line,line+6);
-        write(fds[i],"PRIVMSG %s :PONG! w00t!\r\n",DEBUG,28);
- #endif
-       } else if(!strncmp(line,"ERROR",5)) {
- #ifdef DEBUG
-        printf("error: %s\n",line);
- #endif
-        return 0;
-       } else {
-        line_handler(fds[i],line);
-       }
-       free(line);
-      }
-     }
-     //left shift the backlog so the last thing we got to is at the start
-     if(s > bllen) { //if the ending position is after the size of the backlog...
-      bllen=0;//fuck shifting. :P
-     } else {
-      for(j=s;j<=bllen;j++) {//should work.
-       backlogs[i][j-s]=backlogs[i][j];
-      }
-      bllen-=s;
-     }
+     if(!strncmp(line,"ERROR",5)) return 0;    
+     *t=0;
+     line_handler(fds[i],line);
     }
+    bllen-=((t+2)-backlogs[i]);
+    if(bllen <= 0) bllen=0;
+    else memmove(backlogs[i],(t+2),bllen);
    }
   }
  }

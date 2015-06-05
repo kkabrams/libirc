@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <irc.h>
+#include "../irc.h"
 
 #define mywrite(a,b) write(a,b,strlen(b))
 
@@ -11,12 +11,6 @@ char **chans;
 void extra_handler(int fd) {
  return;
 }
-
-struct user {
- char *nick;
- char *user;
- char *host;
-};
 
 void privmsg_others(int fd,char *msg) {
  int i;
