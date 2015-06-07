@@ -40,8 +40,8 @@ int serverConnect(char *serv,char *port) {
   name[2]=0;
   socketpair(PF_LOCAL,SOCK_STREAM,0,s);
   if(!(pid=fork())) {
-   dup2(s[1],0);
-   dup2(s[1],1);
+   dup2(s[1],fileno(stdin));
+   dup2(s[1],fileno(stdout));
    execv(name[0],name);
   }
   if(pid == -1) return -1;
