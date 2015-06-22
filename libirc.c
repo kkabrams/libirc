@@ -92,6 +92,7 @@ int runem(int *fds,void (*line_handler)(),void (*extra_handler)()) {
  int blsize=CHUNK;
  int bllen=0;
  char buffers[fdl][CHUNK];//THIS IS *NOT* NULL TERMINATED.
+ if(fds[0] == -1) return 0;
  FD_ZERO(&master);
  FD_ZERO(&readfs);
  for(i=0;fds[i] != -1;i++) {
@@ -108,7 +109,6 @@ int runem(int *fds,void (*line_handler)(),void (*extra_handler)()) {
   if((j=select(fdmax+1,&readfs,0,0,&timeout)) == -1 ) return perror("select"),1;
   for(i=0;fds[i] != -1;i++) if(extra_handler) extra_handler(fds[i]);
   if(j == 0) continue;//don't bother to loop over them.
-  printf("getting there.\n");
   for(i=0;fds[i] != -1;i++) {
    if(!FD_ISSET(fds[i],&readfs)) continue;
    if((n=recv(fds[i],buffers[i],CHUNK,0)) <= 0) return (perror("recv"),2);
@@ -123,8 +123,6 @@ int runem(int *fds,void (*line_handler)(),void (*extra_handler)()) {
    }
    memcpy(backlogs[i]+bllen,buffers[i],n);
    bllen+=n;
-
-//HERE EPOCH
    while((t=strstr(backlogs[i],"\r\n"))) {
     line=backlogs[i];
     if(!strncmp(line,"PING",4)) {
