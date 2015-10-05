@@ -26,7 +26,7 @@ int serverConnect(char *serv,char *port) {
  int s[2];
  int pid;
  int try_ipv4;
- char *name[3];
+ char *name[4];
  char buf[SILLYLIMIT];
  struct addrinfo hints, *servinfo, *p=0;
  struct hostent *he;
@@ -37,7 +37,11 @@ int serverConnect(char *serv,char *port) {
  if(*serv == '|') {
   name[0]=serv+1;
   name[1]=port;
-  name[2]=0;
+  if((name[2]=strchr(port,' '))) {
+   *name[2]=0;
+   name[2]++;
+   name[3]=0;
+  }
   socketpair(PF_LOCAL,SOCK_STREAM,0,s);
   if(!(pid=fork())) {
    dup2(s[1],fileno(stdin));
@@ -45,6 +49,7 @@ int serverConnect(char *serv,char *port) {
    execv(name[0],name);
   }
   if(pid == -1) return -1;
+  printf("libirc: serverConnect: returning something! %d\n",fd);
   return s[0];
  }
  memset(&hints,0,sizeof hints);
@@ -65,9 +70,17 @@ int serverConnect(char *serv,char *port) {
           ,hints.ai_family))) continue;
   for(;*(he->h_addr_list);(he->h_addr_list)++) {
    inet_ntop(hints.ai_family,*(he->h_addr_list),buf,SILLYLIMIT);
-   if(!getaddrinfo(buf,port,&hints,&servinfo))
-    for(p=servinfo;p;p=p->ai_next)
-     if(connect(fd,p->ai_addr, p->ai_addrlen) < 0) continue; else return fd;
+   if(!getaddrinfo(buf,port,&hints,&servinfo)) {
+    for(p=servinfo;p;p=p->ai_next) {
+     if(connect(fd,p->ai_addr, p->ai_addrlen) < 0) {
+      printf("libirc: serverConnect: trying something else...\n");
+      continue;
+     } else {
+      printf("libirc: serverConnect: returning something! %d\n",fd);
+      return fd;
+     }
+    }
+   }
   }
  }
  printf("I tried as hard as I could and couldn't connect to %s:%s\n",serv,port);
@@ -80,8 +93,29 @@ int fdlen(int *fds) {
  return i+1;
 }
 
+
+char *memstr(char *s,char *find,size_t l) {
+ return memmem(s,l,find,strlen(find));
+}
+
+/* already in string.h!
+char *memmem(char *s,char *find,size_t sl,size_t fl) {
+ size_t i,j,fl;
+ if(!s) return 0;
+ if(!find) return 0;
+ for(i=0;i<l;i++) {
+  for(j=0;j<fl;j++) {
+   if(s[i] != find[j]) break;
+  }
+  if(j == fl) return s+i;
+ }
+ return 0;
+}
+*/
+
 int runem(int *fds,void (*line_handler)(),void (*extra_handler)()) {
  int j;
+ int hack;
  int fdl=fdlen(fds);
  fd_set master;
  fd_set readfs;
@@ -89,17 +123,19 @@ int runem(int *fds,void (*line_handler)(),void (*extra_handler)()) {
  int fdmax=0,n,i;
  char *backlogs[fdl];
  char *t,*line=0;
- int blsize=CHUNK;
- int bllen=0;
+ int blsize[fdl];
+ int bllen[fdl];
  char buffers[fdl][CHUNK];//THIS IS *NOT* NULL TERMINATED.
  if(fds[0] == -1) return 0;
  FD_ZERO(&master);
  FD_ZERO(&readfs);
  for(i=0;fds[i] != -1;i++) {
   FD_SET(fds[i],&master);
-  backlogs[i]=malloc(CHUNK+1);
+  backlogs[i]=malloc(CHUNK);
   memset(backlogs[i],0,CHUNK);
   memset(buffers[i],0,CHUNK);
+  blsize[i]=CHUNK;
+  bllen[i]=0;
   fdmax=fds[i]>fdmax?fds[i]:fdmax;
  }
  for(;;) {
@@ -112,31 +148,56 @@ int runem(int *fds,void (*line_handler)(),void (*extra_handler)()) {
   for(i=0;fds[i] != -1;i++) {
    if(!FD_ISSET(fds[i],&readfs)) continue;
    if((n=recv(fds[i],buffers[i],CHUNK,0)) <= 0) return (perror("recv"),2);
-   buffers[i][n]=0;//deff right.
-   if(bllen+n >= blsize) {//this is probably off...
-    blsize+=n;
-    t=malloc(blsize);
+   if(bllen[i]+n > blsize[i]) {//this is probably off...
+    t=malloc(blsize[i]+n);
     if(!t) exit(253);
-    memcpy(t,backlogs[i],blsize-n+1);
+    memcpy(t,backlogs[i],blsize[i]);
+    blsize[i]+=n;
     free(backlogs[i]);
     backlogs[i]=t;
    }
-   memcpy(backlogs[i]+bllen,buffers[i],n);
-   bllen+=n;
-   while((t=strstr(backlogs[i],"\r\n"))) {
+   memcpy(backlogs[i]+bllen[i],buffers[i],n);
+   bllen[i]+=n;
+
+   //manually loop?
+//works for IRC that uses \r\n. need to make it work for just \n too?
+/*
+   while((t=memstr(backlogs[i],"\r\n",bllen[i]))) {//no. backlogs aren't nulled.
     line=backlogs[i];
-    if(!strncmp(line,"PING",4)) {
+    if((t-backlogs[i]) >=4 && !strncmp(line,"PING",4)) {
      line[1]='O';
      write(fds[i],line,t-backlogs[i]+2);
     } else {
-     if(!strncmp(line,"ERROR",5)) return 0;    
+     if(!strncmp(line,"ERROR",5)) return 0;
      *t=0;
-     line_handler(fds[i],line);
+     if(line_handler) line_handler(fds[i],line);
     }
-    bllen-=((t+2)-backlogs[i]);
-    if(bllen <= 0) bllen=0;
-    else memmove(backlogs[i],(t+2),bllen);
+    bllen[i]-=((t+2)-backlogs[i]);
+    if(bllen[i] <= 0) bllen[i]=0;
+    else memmove(backlogs[i],(t+2),bllen[i]);
    }
+*/
+   while((t=memchr(backlogs[i],'\n',bllen[i]))) {//no. backlogs aren't nulled.
+    line=backlogs[i];
+    if(*(t-1) == '\r') {
+     t--;
+     hack=2;
+    } else {
+     hack=1;
+    }
+    if((t-backlogs[i]) >=4 && !strncmp(line,"PING",4)) {
+     line[1]='O';
+     write(fds[i],line,t-backlogs[i]+hack);
+    } else {
+     if(!strncmp(line,"ERROR",5)) return 0;
+     *t=0;
+     if(line_handler) line_handler(fds[i],line);
+    }
+    bllen[i]-=((t+hack)-backlogs[i]);
+    if(bllen[i] <= 0) bllen[i]=0;
+    else memmove(backlogs[i],(t+hack),bllen[i]);
+   }
+
   }
  }
  return 0;
@@ -168,6 +229,7 @@ int ircConnect(char *serv,char *port,char *nick,char *user) {
 char **line_cutter(int fd,char *line,struct user *user) {
  int i;
  char **a=malloc(sizeof(char *) * 256);//heh.
+ if(!a) exit(54);
  memset(a,0,sizeof(char *) * 256);
  if(!user) return 0;
  user->nick=0;
