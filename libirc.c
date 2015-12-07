@@ -142,7 +142,11 @@ int runem(int *fds,void (*line_handler)(),void (*extra_handler)()) {
   readfs=master;
   timeout.tv_sec=0;
   timeout.tv_usec=1000;
-  if((j=select(fdmax+1,&readfs,0,0,&timeout)) == -1 ) return perror("select"),1;
+  if((j=select(fdmax+1,&readfs,0,0,&timeout)) == -1 ) {
+   //let's just ignore it for now. :>
+   //return perror("select"),1;
+   continue;
+  }
   for(i=0;fds[i] != -1;i++) if(extra_handler) extra_handler(fds[i]);
   if(j == 0) continue;//don't bother to loop over them.
   for(i=0;fds[i] != -1;i++) {
@@ -160,8 +164,8 @@ int runem(int *fds,void (*line_handler)(),void (*extra_handler)()) {
    bllen[i]+=n;
 
    //manually loop?
-//works for IRC that uses \r\n. need to make it work for just \n too?
 /*
+//works for IRC that uses \r\n. need to make it work for just \n too?
    while((t=memstr(backlogs[i],"\r\n",bllen[i]))) {//no. backlogs aren't nulled.
     line=backlogs[i];
     if((t-backlogs[i]) >=4 && !strncmp(line,"PING",4)) {
@@ -176,6 +180,7 @@ int runem(int *fds,void (*line_handler)(),void (*extra_handler)()) {
     if(bllen[i] <= 0) bllen[i]=0;
     else memmove(backlogs[i],(t+2),bllen[i]);
    }
+
 */
    while((t=memchr(backlogs[i],'\n',bllen[i]))) {//no. backlogs aren't nulled.
     line=backlogs[i];
