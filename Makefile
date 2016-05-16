@@ -10,6 +10,6 @@ $(TARGET):
 clean:
 	rm -f libirc.so
 
-install:
+install: all
 	cp $(TARGET) /usr/local/lib/$(TARGET)
 	cp irc.h /usr/local/include/irc.h

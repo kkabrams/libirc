@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../irc.h"
+#include <irc.h>
 
 #define mywrite(a,b) write(a,b,strlen(b))
 
@@ -12,23 +12,26 @@ void extra_handler(int fd) {
  return;
 }
 
-void privmsg_others(int fd,char *msg) {
+void sendto_others(int fd,char *action,char *msg) {
  int i;
  char tmp[512];
  for(i=0;fds[i] != -1;i++) {
   if(fds[i] != fd) {
-   snprintf(tmp,sizeof(tmp)-1,"PRIVMSG %s :%s\r\n",chans[fdtoi(fds[i])],msg);
+   snprintf(tmp,sizeof(tmp)-1,"%s %s :%s\r\n",action,chans[fdtoi(fds[i])],msg);
    write(fds[i],tmp,strlen(tmp));
   }
  }
 }
 
 void message_handler(int fd,char *from,struct user *user,char *line) {
- int i;
  char tmp[512];
  if(!strcmp(from,chans[fdtoi(fd)])) {//don't want to be forwarding PMs. :P
-  snprintf(tmp,sizeof(tmp)-1,"<%s> %s",user->nick,line);
-  privmsg_others(fd,tmp);
+  if(line[0] == '\x01' && strlen(line) > 9 && !strncmp(line+1,"ACTION ",7) && line[strlen(line)-1] == '\x01') {
+   snprintf(tmp,sizeof(tmp)-1,"%cACTION %s %s",1,user->nick,line+8);
+  } else {
+   snprintf(tmp,sizeof(tmp)-1,"<%s> %s",user->nick,line);
+  }
+  sendto_others(fd,"PRIVMSG",tmp);
  }
 }
 
@@ -54,16 +57,16 @@ void line_handler(int fd,char *line) {//this should be built into the libary?
  }
  if(a[0] && user->nick && a[1]) {
   if(!strcmp(a[0],"JOIN")) {
-   snprintf(tmp,sizeof(tmp)-1,"%cACTION %s has joined %s%c",1,user->nick,a[1]+(*a[1]==':'),1);
-   privmsg_others(fd,tmp);
+   snprintf(tmp,sizeof(tmp)-1,"%s has joined %s",user->nick,a[1]+(*a[1]==':'));
+   sendto_others(fd,"NOTICE",tmp);
   }
   if(!strcmp(a[0],"PART")) {
-   snprintf(tmp,sizeof(tmp)-1,"%cACTION %s has parted %s%c",1,user->nick,a[1]+(*a[1]==':'),1);
-   privmsg_others(fd,tmp);
+   snprintf(tmp,sizeof(tmp)-1,"%s has parted %s",user->nick,a[1]+(*a[1]==':'));
+   sendto_others(fd,"NOTICE",tmp);
   }
   if(!strcmp(a[0],"QUIT")) {
-   snprintf(tmp,sizeof(tmp)-1,"%cACTION %s has quited %s%c",1,user->nick,a[1]+(*a[1]==':'),1);
-   privmsg_others(fd,tmp);
+   snprintf(tmp,sizeof(tmp)-1,"%s has quited %s",user->nick,a[1]+(*a[1]==':'));
+   sendto_others(fd,"NOTICE",tmp);
   }
  }
  free(user);
