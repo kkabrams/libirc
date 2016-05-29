@@ -93,13 +93,15 @@ int main(int argc,char *argv[]) {
  fds=malloc(sizeof(int) * (argc+3) / 3);
  chans=malloc(sizeof(char *) * (argc+3) / 3);
  int i=0;
+ char tmp[512];
  printf("%d\n",argc);
  for(i=0;((i*3)+3)<argc;i++) {
   printf("%d server: %s port: %s channel: %s\n",i,argv[(i*3)+1],argv[(i*3)+2],argv[(i*3)+3]);
   fds[i]=serverConnect(argv[(i*3)+1],argv[(i*3)+2]);
   if(fds[i] == -1) return 1;
   chans[i]=strdup(argv[(i*3)+3]);
-  mywrite(fds[i],"NICK link8239\r\nUSER a b c :d\r\n");
+  snprintf(tmp,sizeof(tmp)-1,"NICK %s\r\nUSER a b c :d\r\n",getenv("NICK"));
+  write(fds[i],tmp,strlen(tmp));
  }
  fds[i]=-1;
  //heh. you can write your own code for picking a different nick per server. fuck you.
