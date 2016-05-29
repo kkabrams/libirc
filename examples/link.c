@@ -19,7 +19,9 @@ void sendto_others(int fd,char *action,char *msg,struct user *user) {
  for(i=0;fds[i] != -1;i++) {
   if(fds[i] != fd) {
    if(chans[fdtoi(fds[i])][0]=='u') {
-    snprintf(tmp,sizeof(tmp)-1,":%s!%s@%s %s %s :%s\n",user->nick,user->user,user->host,action,chans[fdtoi(fds[i])]+1,msg);
+    snprintf(tmp,sizeof(tmp)-1,"NICK %s\r\n",user->nick);
+    write(fds[i],tmp,strlen(tmp));
+    snprintf(tmp,sizeof(tmp)-1,"%s %s :%s\r\n",action,chans[fdtoi(fds[i])]+1,msg);
    } else {
     snprintf(tmp,sizeof(tmp)-1,"%s %s :<%s> %s\r\n",action,chans[fdtoi(fds[i])],user->nick,msg);
    }
@@ -31,15 +33,12 @@ void sendto_others(int fd,char *action,char *msg,struct user *user) {
 
 void message_handler(int fd,char *from,struct user *user,char *line) {
  char tmp[512];
- if(!strcmp(from,chans[fdtoi(fd)])) {//don't want to be forwarding PMs. :P
+ printf("message_handler: line: '%s'\n",line);
+ if(!strcmp(from,chans[fdtoi(fd)][0]=='u'?chans[fdtoi(fd)]+1:chans[fdtoi(fd)])) {//don't want to be forwarding PMs. :P
   if(line[0] == '\x01' && strlen(line) > 9 && !strncmp(line+1,"ACTION ",7) && line[strlen(line)-1] == '\x01') {
    snprintf(tmp,sizeof(tmp)-1,"%cACTION %s %s",1,user->nick,line+8);
   } else {
-   //if(chans[fdtoi(fd)][0]=='u') {
-    snprintf(tmp,sizeof(tmp)-1,"%s",line);
-   //} else {
-   // snprintf(tmp,sizeof(tmp)-1,"<%s> %s",user->nick,line);
-   //}
+   snprintf(tmp,sizeof(tmp)-1,"%s",line);
   }
   sendto_others(fd,"PRIVMSG",tmp,user);
  }
@@ -54,7 +53,7 @@ void line_handler(int fd,char *line) {//this should be built into the libary?
  a=line_cutter(fd,line,user);
  if(!user->user && a[0]) {
   if(!strcmp(a[0],"004")) {
-   snprintf(tmp,sizeof(tmp)-1,"JOIN %s\r\n",chans[fdtoi(fd)]);
+   snprintf(tmp,sizeof(tmp)-1,"JOIN %s\r\n",chans[fdtoi(fd)][0]=='u'?chans[fdtoi(fd)]+1:chans[fdtoi(fd)]);
    temp=strchr(chans[fdtoi(fd)],' ');
    if(temp) *temp=0;
    mywrite(fd,tmp);
