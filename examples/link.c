@@ -1,3 +1,4 @@
+//modified to work better with URC
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,12 +13,17 @@ void extra_handler(int fd) {
  return;
 }
 
-void sendto_others(int fd,char *action,char *msg) {
+void sendto_others(int fd,char *action,char *msg,struct user *user) {
  int i;
  char tmp[512];
  for(i=0;fds[i] != -1;i++) {
   if(fds[i] != fd) {
-   snprintf(tmp,sizeof(tmp)-1,"%s %s :%s\r\n",action,chans[fdtoi(fds[i])],msg);
+   if(chans[fdtoi(fds[i])][0]=='u') {
+    snprintf(tmp,sizeof(tmp)-1,":%s!%s@%s %s %s :%s\n",user->nick,user->user,user->host,action,chans[fdtoi(fds[i])]+1,msg);
+   } else {
+    snprintf(tmp,sizeof(tmp)-1,"%s %s :<%s> %s\r\n",action,chans[fdtoi(fds[i])],user->nick,msg);
+   }
+   printf("writing: %s\n",tmp);
    write(fds[i],tmp,strlen(tmp));
   }
  }
@@ -29,9 +35,13 @@ void message_handler(int fd,char *from,struct user *user,char *line) {
   if(line[0] == '\x01' && strlen(line) > 9 && !strncmp(line+1,"ACTION ",7) && line[strlen(line)-1] == '\x01') {
    snprintf(tmp,sizeof(tmp)-1,"%cACTION %s %s",1,user->nick,line+8);
   } else {
-   snprintf(tmp,sizeof(tmp)-1,"<%s> %s",user->nick,line);
+   //if(chans[fdtoi(fd)][0]=='u') {
+    snprintf(tmp,sizeof(tmp)-1,"%s",line);
+   //} else {
+   // snprintf(tmp,sizeof(tmp)-1,"<%s> %s",user->nick,line);
+   //}
   }
-  sendto_others(fd,"PRIVMSG",tmp);
+  sendto_others(fd,"PRIVMSG",tmp,user);
  }
 }
 
@@ -58,15 +68,15 @@ void line_handler(int fd,char *line) {//this should be built into the libary?
  if(a[0] && user->nick && a[1]) {
   if(!strcmp(a[0],"JOIN")) {
    snprintf(tmp,sizeof(tmp)-1,"%s has joined %s",user->nick,a[1]+(*a[1]==':'));
-   sendto_others(fd,"NOTICE",tmp);
+   sendto_others(fd,"NOTICE",tmp,user);
   }
   if(!strcmp(a[0],"PART")) {
    snprintf(tmp,sizeof(tmp)-1,"%s has parted %s",user->nick,a[1]+(*a[1]==':'));
-   sendto_others(fd,"NOTICE",tmp);
+   sendto_others(fd,"NOTICE",tmp,user);
   }
   if(!strcmp(a[0],"QUIT")) {
    snprintf(tmp,sizeof(tmp)-1,"%s has quited %s",user->nick,a[1]+(*a[1]==':'));
-   sendto_others(fd,"NOTICE",tmp);
+   sendto_others(fd,"NOTICE",tmp,user);
   }
  }
  free(user);
