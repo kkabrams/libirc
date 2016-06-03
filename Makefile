@@ -2,9 +2,7 @@ LDFLAGS=-lirc -Llibirc
 CFLAGS=-fpic -shared -pedantic -Wall
 TARGET=libirc.so
 
-all: $(TARGET)
-
-$(TARGET):
+all: libirc.c
 	$(CC) $(CFLAGS) -o $(TARGET) libirc.c
 
 clean:
