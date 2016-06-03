@@ -121,6 +121,7 @@ int runem(int *fds,void (*line_handler)(),void (*extra_handler)()) {
  fd_set readfs;
  struct timeval timeout;
  int fdmax=0,n,i;
+ char tmp[256];
  char *backlogs[fdl];
  char *t,*line=0;
  int blsize[fdl];
@@ -151,7 +152,11 @@ int runem(int *fds,void (*line_handler)(),void (*extra_handler)()) {
   if(j == 0) continue;//don't bother to loop over them.
   for(i=0;fds[i] != -1;i++) {
    if(!FD_ISSET(fds[i],&readfs)) continue;
-   if((n=recv(fds[i],buffers[i],CHUNK,0)) <= 0) return (perror("recv"),2);
+   if((n=recv(fds[i],buffers[i],CHUNK,0)) <= 0) {
+    snprintf(tmp,sizeof(tmp)-1,"fd %d: recv",fds[i]);//hopefully this doesn't error and throw off error messages.
+    perror(tmp);
+    return 2;
+   }
    if(bllen[i]+n > blsize[i]) {//this is probably off...
     t=malloc(blsize[i]+n);
     if(!t) exit(253);
