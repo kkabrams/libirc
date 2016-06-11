@@ -52,7 +52,7 @@ void line_handler(int fd,char *line) {//this should be built into the libary?
  printf("line: '%s'\n",line);
  a=line_cutter(fd,line,user);
  if(!user->user && a[0]) {
-  if(!strcmp(a[0],"004")) {
+  if(!strcmp(a[0],"004") || !strcmp(a[0],"001") || !strcmp(a[0],"376")) {
    snprintf(tmp,sizeof(tmp)-1,"JOIN %s\r\n",chans[fdtoi(fd)][0]=='u'?chans[fdtoi(fd)]+1:chans[fdtoi(fd)]);
    temp=strchr(chans[fdtoi(fd)],' ');
    if(temp) *temp=0;
