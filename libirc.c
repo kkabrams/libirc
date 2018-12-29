@@ -32,7 +32,7 @@ int serverConnect(char *serv,char *port) {
  struct hostent *he;
  struct sockaddr_in saddr;
  struct sockaddr_in6 saddr6;
- printf("libirc: serverConnect: %s %s\n",serv,port);
+ //printf("libirc: serverConnect: %s %s\n",serv,port);
  if(!serv || !port) return -1;
  if(*serv == '|') {
   name[0]=serv+1;
@@ -49,7 +49,7 @@ int serverConnect(char *serv,char *port) {
    execv(name[0],name);
   }
   if(pid == -1) return -1;
-  printf("libirc: serverConnect: returning something! %d\n",fd);
+  //printf("libirc: serverConnect: returning something! %d\n",fd);
   return s[0];
  }
  memset(&hints,0,sizeof hints);
@@ -73,17 +73,17 @@ int serverConnect(char *serv,char *port) {
    if(!getaddrinfo(buf,port,&hints,&servinfo)) {
     for(p=servinfo;p;p=p->ai_next) {
      if(connect(fd,p->ai_addr, p->ai_addrlen) < 0) {
-      printf("libirc: serverConnect: trying something else...\n");
+      //printf("libirc: serverConnect: trying something else...\n");
       continue;
      } else {
-      printf("libirc: serverConnect: returning something! %d\n",fd);
+      //printf("libirc: serverConnect: returning something! %d\n",fd);
       return fd;
      }
     }
    }
   }
  }
- printf("I tried as hard as I could and couldn't connect to %s:%s\n",serv,port);
+ //printf("I tried as hard as I could and couldn't connect to %s:%s\n",serv,port);
  return -1;
 }
 
@@ -152,8 +152,8 @@ int runem(int *fds,void (*line_handler)(),void (*extra_handler)()) {
   if(j == 0) continue;//don't bother to loop over them.
   for(i=0;fds[i] != -1;i++) {
    if(!FD_ISSET(fds[i],&readfs)) continue;
-   if((n=recv(fds[i],buffers[i],CHUNK,0)) <= 0) {
-    snprintf(tmp,sizeof(tmp)-1,"fd %d: recv",fds[i]);//hopefully this doesn't error and throw off error messages.
+   if((n=read(fds[i],buffers[i],CHUNK)) <= 0) {
+    snprintf(tmp,sizeof(tmp)-1,"fd %d: read",fds[i]);//hopefully this doesn't error and throw off error messages.
     perror(tmp);
     return 2;
    }

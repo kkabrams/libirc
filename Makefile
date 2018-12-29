@@ -1,13 +1,16 @@
-LDFLAGS=-lirc -Llibirc
-CFLAGS=-fpic -shared -pedantic -Wall
+CFLAGS=-fpic -shared -pedantic -Wall -ggdb
 TARGET=libirc.so
+PREFIX=/usr/local
 
-all: libirc.c
-	$(CC) $(CFLAGS) -o $(TARGET) libirc.c
+all: libirc.so
+
+$(TARGET): libirc.o
+	ld -shared -o $(TARGET) libirc.o
 
 clean:
-	rm -f libirc.so
+	rm -f $(TARGET)
+	rm *.o
 
 install: all
-	cp $(TARGET) /usr/local/lib/$(TARGET)
-	cp irc.h /usr/local/include/irc.h
+	cp $(TARGET) $(PREFIX)/lib/$(TARGET)
+	cp irc.h $(PREFIX)/include/irc.h
