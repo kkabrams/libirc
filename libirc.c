@@ -1,5 +1,6 @@
-#include <sys/time.h>
+#define _GNU_SOURCE //I want memmem out of string.h
 #include <string.h>
+#include <sys/time.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <netinet/in.h>
