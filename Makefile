@@ -1,6 +1,6 @@
-CFLAGS=-fpic -shared -pedantic -Wall -ggdb
+CFLAGS=-fpic -shared -pedantic -Wall -g3
 TARGET=libirc.so
-PREFIX=/usr/local
+PREFIX:=/usr/local
 
 all: libirc.so
 
@@ -12,5 +12,7 @@ clean:
 	rm *.o
 
 install: all
-	cp $(TARGET) $(PREFIX)/lib/$(TARGET)
-	cp irc.h $(PREFIX)/include/irc.h
+	mkdir -p $(PREFIX)/lib
+	mkdir -p $(PREFIX)/include
+	install $(TARGET) $(PREFIX)/lib/$(TARGET)
+	install irc.h $(PREFIX)/include/irc.h
