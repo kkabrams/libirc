@@ -1,1 +1,3 @@
-library for handling IRC stuff. duh.
+library for handling IRC stuff.
+
+requires libidc.
