@@ -1,4 +1,5 @@
 #define _GNU_SOURCE //I want memmem out of string.h
+#include <signal.h>
 #include <string.h>
 #include <sys/time.h>
 #include <stdlib.h>
@@ -10,12 +11,17 @@
 #include <unistd.h>
 #include <sys/select.h>
 #include <sys/un.h>
+
+//epoch's lib includes:
+#include <idc.h> //going to use this for mainloop instead of writing one in here.
 #include "irc.h"
 
 //#define DEBUG "epoch" //nick or channel to send debug info to.
 #define CHUNK 4096
 
 #define SILLYLIMIT 1024
+
+extern struct global libline;
 
 /* how this works:
 if server == |/program then open a socketpair and fork and exec program
@@ -94,7 +100,6 @@ int fdlen(int *fds) {
  return i+1;
 }
 
-
 char *memstr(char *s,char *find,size_t l) {
  return memmem(s,l,find,strlen(find));
 }
@@ -114,104 +119,44 @@ char *memmem(char *s,char *find,size_t sl,size_t fl) {
 }
 */
 
-int runem(int *fds,void (*line_handler)(),void (*extra_handler)()) {
- int j;
- int hack;
- int fdl=fdlen(fds);
- fd_set master;
- fd_set readfs;
- struct timeval timeout;
- int fdmax=0,n,i;
- char tmp[256];
- char *backlogs[fdl];
- char *t,*line=0;
- int blsize[fdl];
- int bllen[fdl];
- char buffers[fdl][CHUNK];//THIS IS *NOT* NULL TERMINATED.
- if(fds[0] == -1) return 0;
- FD_ZERO(&master);
- FD_ZERO(&readfs);
- for(i=0;fds[i] != -1;i++) {
-  FD_SET(fds[i],&master);
-  backlogs[i]=malloc(CHUNK);
-  memset(backlogs[i],0,CHUNK);
-  memset(buffers[i],0,CHUNK);
-  blsize[i]=CHUNK;
-  bllen[i]=0;
-  fdmax=fds[i]>fdmax?fds[i]:fdmax;
- }
- for(;;) {
-  readfs=master;
-  timeout.tv_sec=0;
-  timeout.tv_usec=1000;
-  if((j=select(fdmax+1,&readfs,0,0,&timeout)) == -1 ) {
-   //let's just ignore it for now. :>
-   //return perror("select"),1;
-   continue;
+void (*g_line_handler)(); //kek
+void (*g_extra_handler)(); //kek
+
+int g_extra_fd;
+
+void irc_handler(struct shit *me,char *line) {
+  fprintf(stderr,"debug: %s\n",line);
+  if(!strncmp(line,"PING ",5)) {
+    //I write back to the me->fd
+    fprintf(stderr,"libirc: GOT A PING. SENDING PONG.\n");
+    dprintf(me->fd,"PONG :%s\r\n",line+5);
+    return;//we probably don't need to let the bot know that it pinged. right?
   }
-  for(i=0;fds[i] != -1;i++) if(extra_handler) extra_handler(fds[i]);
-  if(j == 0) continue;//don't bother to loop over them.
+  //I need a way to get the line_handler passed to runem in here.
+  g_line_handler(me->fd,line);
+  //if(g_extra_handler) g_extra_handler(me->fd);///haxxxxxxxx fuck me.
+  //GLOBALS. OFC. THAT IS THE RIGHT WAY TO DO IT. :D :D :D :D :D :D :D :|
+}
+
+void alarm_handler(int sig) {
+  g_extra_handler(g_extra_fd);//???
+  alarm(1);//lol
+}
+
+//is this really good enough to work? it doesn't have extra_handler use though.
+int runem(int *fds,void (*line_handler)(),void (*extra_handler)()) { //wrap select_everything() so runem() still works
+  g_line_handler=line_handler;
+  g_extra_handler=extra_handler;
+  g_extra_fd=fds[0];
+  int i;
+  //signal(SIGALRM,alarm_handler);
+  //alarm(1);
+  //initialization of this can't be in here. this gets ran after a tail is added.
   for(i=0;fds[i] != -1;i++) {
-   if(!FD_ISSET(fds[i],&readfs)) continue;
-   if((n=read(fds[i],buffers[i],CHUNK)) <= 0) {
-    snprintf(tmp,sizeof(tmp)-1,"fd %d: read",fds[i]);//hopefully this doesn't error and throw off error messages.
-    perror(tmp);
-    return 2;
-   }
-   if(bllen[i]+n > blsize[i]) {//this is probably off...
-    t=malloc(blsize[i]+n);
-    if(!t) exit(253);
-    memcpy(t,backlogs[i],blsize[i]);
-    blsize[i]+=n;
-    free(backlogs[i]);
-    backlogs[i]=t;
-   }
-   memcpy(backlogs[i]+bllen[i],buffers[i],n);
-   bllen[i]+=n;
-
-   //manually loop?
-/*
-//works for IRC that uses \r\n. need to make it work for just \n too?
-   while((t=memstr(backlogs[i],"\r\n",bllen[i]))) {//no. backlogs aren't nulled.
-    line=backlogs[i];
-    if((t-backlogs[i]) >=4 && !strncmp(line,"PING",4)) {
-     line[1]='O';
-     write(fds[i],line,t-backlogs[i]+2);
-    } else {
-     if(!strncmp(line,"ERROR",5)) return 0;
-     *t=0;
-     if(line_handler) line_handler(fds[i],line);
-    }
-    bllen[i]-=((t+2)-backlogs[i]);
-    if(bllen[i] <= 0) bllen[i]=0;
-    else memmove(backlogs[i],(t+2),bllen[i]);
-   }
-
-*/
-   while((t=memchr(backlogs[i],'\n',bllen[i]))) {//no. backlogs aren't nulled.
-    line=backlogs[i];
-    if(*(t-1) == '\r') {
-     t--;
-     hack=2;
-    } else {
-     hack=1;
-    }
-    if((t-backlogs[i]) >=4 && !strncmp(line,"PING",4)) {
-     line[1]='O';
-     write(fds[i],line,t-backlogs[i]+hack);
-    } else {
-     if(!strncmp(line,"ERROR",5)) return 0;
-     *t=0;
-     if(line_handler) line_handler(fds[i],line);
-    }
-    bllen[i]-=((t+hack)-backlogs[i]);
-    if(bllen[i] <= 0) bllen[i]=0;
-    else memmove(backlogs[i],(t+hack),bllen[i]);
-   }
-
+    add_fd(fds[i],irc_handler);
   }
- }
- return 0;
+  select_on_everything();
+  return 0;
 }
 
 //wrap runem to keep runit around :P
