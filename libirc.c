@@ -125,11 +125,16 @@ void (*g_extra_handler)(); //kek
 int g_extra_fd;
 
 void irc_handler(struct shit *me,char *line) {
-  fprintf(stderr,"debug: %s\n",line);
+//  fprintf(stderr,"debug: %s\n",line);
+  if(!line) {
+    //we're EOFd
+    //we need to reconnect to the server.
+    return;
+  }
   if(!strncmp(line,"PING ",5)) {
     //I write back to the me->fd
     fprintf(stderr,"libirc: GOT A PING. SENDING PONG.\n");
-    dprintf(me->fd,"PONG :%s\r\n",line+5);
+    dprintf(me->fd,"PONG %s\r\n",line+5);
     return;//we probably don't need to let the bot know that it pinged. right?
   }
   //I need a way to get the line_handler passed to runem in here.
@@ -156,7 +161,7 @@ int runem(int *fds,void (*line_handler)(),void (*extra_handler)()) { //wrap sele
     add_fd(fds[i],irc_handler);
   }
   select_on_everything();
-  return 0;
+  return 1;
 }
 
 //wrap runem to keep runit around :P
