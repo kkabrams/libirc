@@ -21,7 +21,7 @@
 
 #define SILLYLIMIT 1024
 
-extern struct global libline;
+//extern struct idc_global idc;//not sure if this is needed.
 
 /* how this works:
 if server == |/program then open a socketpair and fork and exec program
