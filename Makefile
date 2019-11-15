@@ -1,6 +1,6 @@
-CFLAGS=-fpic -shared -pedantic -Wall -g3
-TARGET=libirc.so
 PREFIX:=/usr/local
+CFLAGS=-fpic -shared -pedantic -Wall -g3 -I$(PREFIX)/include
+TARGET=libirc.so
 
 all: libirc.so
 
